@@ -76,7 +76,7 @@ async function runScrape() {
   const startedAt = new Date().toISOString();
   let totalNew = 0, sourcesScraped = 0;
 
-  // LLM config oluştur (video transcript özetleme için)
+  // LLM config oluştur (video transcript özetleme + çeviri için)
   const active = dbFunctions.getSetting('active_provider') || 'openrouter';
   const llmConfig = llmGetConfig(active);
 
@@ -86,6 +86,18 @@ async function runScrape() {
   const ytItems = await scrapeAllYoutube(llmConfig);
   totalNew += dbFunctions.insertManyNews(ytItems);
   sourcesScraped += ytItems.length > 0 ? 1 : 0;
+
+  // Tarama sonrası otomatik Türkçe çeviri (LLM ayarlıysa)
+  if (llmConfig && totalNew > 0) {
+    try {
+      console.log('[Scrape] Otomatik Türkçe çeviri başlatılıyor...');
+      const trResult = await translateAllUntranslated(llmConfig.apiKey, llmConfig.modelId, active, 20);
+      console.log(`[Scrape] Çeviri tamamlandı: ${trResult.translated} haber çevrildi.`);
+    } catch (err) {
+      console.error('[Scrape] Otomatik çeviri hatası:', err.message);
+    }
+  }
+
   dbFunctions.insertScrapeLog({ started_at: startedAt, finished_at: new Date().toISOString(), sources_scraped: sourcesScraped, new_items: totalNew, status: 'success' });
   return { webItems: webItems.length, ytItems: ytItems.length, newItems: totalNew };
 }
@@ -256,16 +268,36 @@ app.get('/api/knowledge', (req, res) => {
 
 app.post('/api/tts', async (req, res) => {
   try {
-    const { text, voice = 'tr-TR-AhmetNeural' } = req.body;
+    const { text, voice = 'tr-TR-EmelNeural' } = req.body;
     if (!text) return res.status(400).json({ success: false, error: 'Metin gerekli' });
     const { execSync } = await import('child_process');
     const fs = await import('fs');
+
+    // Metni temizle: noktalama işaretlerinden önceki gereksiz boşlukları sil
+    let cleanText = text
+      .replace(/\s+/g, ' ')
+      .replace(/\.\s*\.\s*/g, '. ')
+      .replace(/,\s*,/g, ',')
+      .trim();
+
+    // SSML ile hız ve pitch ayarı: %25 hızlı, +10Hz pitch (hafif robotik)
+    const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="tr-TR">
+      <voice name="${voice}">
+        <prosody rate="+25%" pitch="+10Hz">
+          ${cleanText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+        </prosody>
+      </voice>
+    </speak>`;
+
     const tmpFile = `tts_${Date.now()}.mp3`;
-    const script = `import asyncio, edge_tts\nasync def main():\n    c = edge_tts.Communicate("""${text.replace(/"/g, '\\"').replace(/`/g, '\\`')}""", "${voice}")\n    await c.save("${tmpFile}")\nasyncio.run(main())`;
+    const script = `import asyncio, edge_tts
+async def main():
+    c = edge_tts.Communicate('''${ssml.replace(/'/g, "\\'")}''', "${voice}")
+    await c.save("${tmpFile}")
+asyncio.run(main())`;
     const scriptFile = `tts_${Date.now()}.py`;
     fs.writeFileSync(scriptFile, script);
     try {
-      // python3 veya python dene
       let pythonCmd = 'python3';
       try { execSync('python3 --version', { stdio: 'pipe' }); } catch { pythonCmd = 'python'; }
       execSync(`${pythonCmd} "${scriptFile}"`, { timeout: 30000, stdio: 'pipe' });

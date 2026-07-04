@@ -29,14 +29,14 @@ async function fetchRssFeed(source) {
 
       if (!title || !link) continue;
 
-      // Özet çıkar
+      // Özet çıkar (500 karaktere kadar)
       let summary = '';
       if (item.contentSnippet) {
-        summary = item.contentSnippet.substring(0, 300);
+        summary = item.contentSnippet.substring(0, 500);
       } else if (item.content) {
-        summary = stripHtml(item.content).substring(0, 300);
+        summary = stripHtml(item.content).substring(0, 500);
       } else if (item.description) {
-        summary = stripHtml(item.description).substring(0, 300);
+        summary = stripHtml(item.description).substring(0, 500);
       }
 
       // Thumbnail çıkar

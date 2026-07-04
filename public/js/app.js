@@ -218,7 +218,8 @@ async function startScan() {
 
 // ===== SESLI OKUMA (Edge TTS) =====
 async function readAloud(newsId) {
-  if (ttsAudio && !ttsAudio.ended) { ttsAudio.pause(); ttsAudio = null; document.querySelectorAll('.tts-btn').forEach(b => b.classList.remove('playing')); return; }
+  // Durdurma: zaten çalıyorsa durdur
+  if (ttsAudio && !ttsAudio.ended) { ttsAudio.pause(); ttsAudio.currentTime = 0; ttsAudio = null; document.querySelectorAll('.tts-btn').forEach(b => b.classList.remove('playing')); return; }
   try {
     const res = await fetch(`${API}/api/news/${newsId}`);
     const json = await res.json();
@@ -226,20 +227,21 @@ async function readAloud(newsId) {
     const item = json.data;
     const text = `${item.title}. ${item.summary || ''}`;
     await playTts(text, newsId);
-  } catch (err) { showToast('Sesli okuma hatası'); }
+  } catch (err) {}
 }
 
 async function readAloudModal() {
   if (!currentModalNews) return;
   const text = `${currentModalNews.title}. ${currentModalNews.summary || ''}`;
   const btn = document.getElementById('modal-tts-btn');
-  if (ttsAudio && !ttsAudio.ended) { ttsAudio.pause(); ttsAudio = null; btn.classList.remove('playing'); return; }
+  // Durdurma
+  if (ttsAudio && !ttsAudio.ended) { ttsAudio.pause(); ttsAudio.currentTime = 0; ttsAudio = null; btn.classList.remove('playing'); return; }
   await playTts(text, 'modal', btn);
 }
 
 async function playTts(text, id, btn) {
-  const voice = document.getElementById('voice-select')?.value || 'tr-TR-AhmetNeural';
-  showToast('Ses hazırlanıyor...');
+  const voice = document.getElementById('voice-select')?.value || 'tr-TR-EmelNeural';
+  // Toast yok — direkt oynat
   try {
     const res = await fetch(`${API}/api/tts`, {
       method: 'POST',
@@ -258,8 +260,8 @@ async function playTts(text, id, btn) {
       if (cardBtn) cardBtn.classList.remove('playing');
       URL.revokeObjectURL(url);
     };
-    ttsAudio.play();
-  } catch (err) { showToast('Sesli okuma başlatılamadı'); if (btn) btn.classList.remove('playing'); }
+    await ttsAudio.play();
+  } catch (err) { if (btn) btn.classList.remove('playing'); }
 }
 
 // ===== SESLİ GİRİŞ (Web Speech API) =====

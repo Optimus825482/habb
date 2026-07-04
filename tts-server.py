@@ -14,13 +14,23 @@ TURKISH_VOICES = [
     "tr-TR-EmelNeural"
 ]
 
-async def text_to_speech(text, voice="tr-TR-AhmetNeural", output_file="output.mp3"):
-    """Metni sese çevir"""
-    communicate = edge_tts.Communicate(text, voice)
+async def text_to_speech(text, voice="tr-TR-EmelNeural", output_file="output.mp3"):
+    """Metni sese çevir - SSML ile hız ve pitch ayarı"""
+    # Metni temizle
+    clean = ' '.join(text.split())
+    # SSML: %25 hızlı, +10Hz pitch (hafif robotik)
+    ssml = f'''<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="tr-TR">
+      <voice name="{voice}">
+        <prosody rate="+25%" pitch="+10Hz">
+          {clean.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')}
+        </prosody>
+      </voice>
+    </speak>'''
+    communicate = edge_tts.Communicate(ssml, voice)
     await communicate.save(output_file)
     return output_file
 
-async def text_to_speech_chunks(text, voice="tr-TR-AhmetNeural"):
+async def text_to_speech_chunks(text, voice="tr-TR-EmelNeural"):
     """Metni chunk'lara bölerek sese çevir (profesyonel okuma için)"""
     # Uzun metni cümlelere böl
     sentences = []
@@ -57,8 +67,8 @@ async def text_to_speech_chunks(text, voice="tr-TR-AhmetNeural"):
 def get_available_voices():
     """Mevcut Türkçe sesleri listele"""
     return [
-        {"id": "tr-TR-AhmetNeural", "name": "Ahmet (Erkek)", "gender": "Male", "locale": "tr-TR"},
-        {"id": "tr-TR-EmelNeural", "name": "Emel (Kadın)", "gender": "Female", "locale": "tr-TR"}
+        {"id": "tr-TR-EmelNeural", "name": "Emel (Kadın)", "gender": "Female", "locale": "tr-TR"},
+        {"id": "tr-TR-AhmetNeural", "name": "Ahmet (Erkek)", "gender": "Male", "locale": "tr-TR"}
     ]
 
 
@@ -93,7 +103,7 @@ class TTSHandler(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(content_length))
 
         text = body.get('text', '')
-        voice = body.get('voice', 'tr-TR-AhmetNeural')
+        voice = body.get('voice', 'tr-TR-EmelNeural')
 
         if not text:
             self.send_json(400, {"error": "text gerekli"})
@@ -125,7 +135,7 @@ class TTSHandler(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(content_length))
 
         text = body.get('text', '')
-        voice = body.get('voice', 'tr-TR-AhmetNeural')
+        voice = body.get('voice', 'tr-TR-EmelNeural')
 
         if not text:
             self.send_json(400, {"error": "text gerekli"})
