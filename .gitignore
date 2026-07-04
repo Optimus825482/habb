@@ -1,0 +1,14 @@
+node_modules/
+ai-haber.db
+ai-haber.db-shm
+ai-haber.db-wal
+*.mp3
+*.wav
+transcript_*.srt
+transcript_*.tr.srt
+transcript_*.en.srt
+.env
+.env.local
+*.log
+.DS_Store
+Thumbs.db

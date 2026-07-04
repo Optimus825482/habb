@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0f0f1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AI Haber">
+  <meta name="description" content="Yapay Zeka, Vibe Coding ve Developer Tools haberlerini takip edin">
+  <title>AI Haber Takip</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+
+  <div class="scan-progress" id="scan-progress" style="display:none;"></div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div class="logo">
+        <div class="logo-icon">🤖</div>
+        <div class="logo-text">
+          <h1 id="app-title">AI Haber Takip</h1>
+          <p>Yapay Zeka & Developer Tools</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="stats-badge" id="stats-badge"><span>0</span> haber</div>
+        <button class="btn-scan" id="scan-btn" onclick="startScan()">🔍 Tarama</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Kategori Sekmeleri -->
+  <nav class="category-tabs" id="category-tabs">
+    <button class="tab active" data-category="all">📰 Tümü <span class="tab-count">0</span></button>
+    <button class="tab" data-category="ai">🧠 Yapay Zeka <span class="tab-count">0</span></button>
+    <button class="tab" data-category="vibe-coding">💻 Vibe Coding <span class="tab-count">0</span></button>
+    <button class="tab" data-category="devtools">🛠️ DevTools <span class="tab-count">0</span></button>
+    <button class="tab" data-category="video">🎬 Videolar <span class="tab-count">0</span></button>
+  </nav>
+
+  <!-- Ana Sayfa -->
+  <main class="main-content" id="home-page">
+    <div class="news-grid" id="news-grid"></div>
+    <div class="empty-state" id="empty-state" style="display:none;">
+      <div class="empty-icon">📭</div>
+      <h3>Henüz haber yok</h3>
+      <p>Tarama butonuna basarak ilk haberleri toplayabilirsiniz.</p>
+      <button class="btn-primary" onclick="startScan()">Taramayı Başlat</button>
+    </div>
+  </main>
+
+  <!-- Sohbet Sayfası -->
+  <div class="chat-page" id="chat-page" style="display:none;">
+    <div class="chat-container">
+      <div class="chat-messages" id="chat-messages">
+        <div class="chat-welcome">
+          <div class="chat-welcome-icon">🤖</div>
+          <h3 id="chat-greeting">Merhaba!</h3>
+          <p>Haberler hakkında soru sorabilir,bugünkü gelişmeleri öğrenebilirsin.</p>
+        </div>
+      </div>
+      <div class="chat-input-area">
+        <button class="chat-voice-btn" id="voice-btn" onclick="startVoiceInput()" title="Sesli Giriş">🎤</button>
+        <input type="text" id="chat-input" placeholder="Bir şey sor..." onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="chat-send-btn" onclick="sendChat()">➤</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ayarlar Sayfası -->
+  <div class="settings-page" id="settings-page" style="display:none;">
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-value" id="stat-total">0</div><div class="stat-label">Toplam Haber</div></div>
+      <div class="stat-card"><div class="stat-value" id="stat-today">0</div><div class="stat-label">Bugün</div></div>
+      <div class="stat-card"><div class="stat-value" id="stat-web">0</div><div class="stat-label">Web</div></div>
+      <div class="stat-card"><div class="stat-value" id="stat-video">0</div><div class="stat-label">Video</div></div>
+    </div>
+
+    <!-- Kullanıcı Adı -->
+    <div class="settings-card">
+      <h3>👤 Kişisel Bilgiler</h3>
+      <div class="setting-item" style="flex-direction:column; align-items:stretch; gap:8px;">
+        <div class="setting-info"><h4>Adınız</h4><p>AI asistanı size adınızla hitap etsin</p></div>
+        <div style="display:flex; gap:8px;">
+          <input type="text" id="user-name-input" placeholder="Adınız..." class="setting-input">
+          <button class="btn-scan" onclick="saveUserName()" style="font-size:12px; padding:8px 14px;">Kaydet</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LLM Ayarları -->
+    <div class="settings-card">
+      <h3>🤖 Yapay Zeka Ayarları</h3>
+
+      <!-- Provider Seçimi -->
+      <div class="setting-item" style="flex-direction:column; align-items:stretch; gap:8px;">
+        <div class="setting-info"><h4>Provider Seçimi</h4><p>Hangi AI servisini kullanmak istersiniz</p></div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="provider-btn active" id="btn-provider-openrouter" onclick="selectProvider('openrouter')">
+            <span class="provider-icon">🌐</span> OpenRouter
+            <span class="provider-badge">Ücretsiz modeller</span>
+          </button>
+          <button class="provider-btn" id="btn-provider-opencode" onclick="selectProvider('opencode')">
+            <span class="provider-icon">⚡</span> OpenCode Zen
+            <span class="provider-badge">Ücretsiz modeller</span>
+          </button>
+          <button class="provider-btn" id="btn-provider-kilogateway" onclick="selectProvider('kilogateway')">
+            <span class="provider-icon">🔗</span> KiloGateway
+            <span class="provider-badge">Ücretsiz modeller</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- OpenRouter Key -->
+      <div class="setting-item provider-section" id="section-openrouter" style="flex-direction:column; align-items:stretch; gap:8px;">
+        <div class="setting-info"><h4>OpenRouter API Key</h4><p id="or-key-status">Henüz girilmedi · <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--accent-secondary);">Ücretsiz key al →</a></p></div>
+        <div style="display:flex; gap:8px;">
+          <input type="password" id="or-key-input" placeholder="sk-or-v1-..." class="setting-input" autocomplete="off">
+          <button class="btn-scan" onclick="saveProviderKey('openrouter')" style="font-size:12px; padding:8px 14px;">Kaydet</button>
+        </div>
+      </div>
+
+      <!-- OpenCode Key -->
+      <div class="setting-item provider-section" id="section-opencode" style="flex-direction:column; align-items:stretch; gap:8px; display:none;">
+        <div class="setting-info"><h4>OpenCode Zen API Key</h4><p id="oc-key-status">Henüz girilmedi · <a href="https://opencode.ai/auth" target="_blank" style="color:var(--accent-secondary);">Key al →</a></p></div>
+        <div style="display:flex; gap:8px;">
+          <input type="password" id="oc-key-input" placeholder="OpenCode API key..." class="setting-input" autocomplete="off">
+          <button class="btn-scan" onclick="saveProviderKey('opencode')" style="font-size:12px; padding:8px 14px;">Kaydet</button>
+        </div>
+      </div>
+
+      <!-- KiloGateway Key -->
+      <div class="setting-item provider-section" id="section-kilogateway" style="flex-direction:column; align-items:stretch; gap:8px; display:none;">
+        <div class="setting-info"><h4>KiloGateway API Key</h4><p id="kg-key-status">Henüz girilmedi · <a href="https://kilo.ai" target="_blank" style="color:var(--accent-secondary);">Key al →</a></p></div>
+        <div style="display:flex; gap:8px;">
+          <input type="password" id="kg-key-input" placeholder="KiloGateway API key..." class="setting-input" autocomplete="off">
+          <button class="btn-scan" onclick="saveProviderKey('kilogateway')" style="font-size:12px; padding:8px 14px;">Kaydet</button>
+        </div>
+      </div>
+
+      <!-- Model Seçimi -->
+      <div class="setting-item" style="flex-direction:column; align-items:stretch; gap:8px;">
+        <div class="setting-info"><h4>Model Seçimi</h4><p id="model-status">Model seçilmedi</p></div>
+        <div style="display:flex; gap:8px;">
+          <select id="model-select" class="setting-select" onchange="selectModel(this.value)" disabled>
+            <option value="">API Key girip modelleri yükleyin</option>
+          </select>
+          <button class="btn-scan" onclick="loadModels()" style="font-size:12px; padding:8px 14px;" id="btn-load-models">🔄</button>
+        </div>
+      </div>
+
+      <!-- Çeviri -->
+      <div class="setting-item" style="flex-direction:column; align-items:stretch; gap:12px;">
+        <div class="setting-info"><h4>Türkçe Çeviri</h4><p id="translate-status">Haberleri çevir + hafızaya kaydet</p></div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="btn-scan" onclick="startTranslation()" style="font-size:12px;">🔄 Haberleri Çevir</button>
+          <span id="translate-progress" style="font-size:12px; color:var(--text-muted);"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ses Ayarları -->
+    <div class="settings-card">
+      <h3>🔊 Ses Ayarları</h3>
+      <div class="setting-item" style="flex-direction:column; align-items:stretch; gap:8px;">
+        <div class="setting-info"><h4>Okuma Sesi</h4><p>Haberleri sesli okurken kullanılacak ses</p></div>
+        <select id="voice-select" class="setting-select" onchange="saveVoiceSetting(this.value)">
+          <option value="tr-TR-AhmetNeural">Ahmet (Erkek) 🇹🇷</option>
+          <option value="tr-TR-EmelNeural">Emel (Kadın) 🇹🇷</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h3>🕐 Son Tarama</h3>
+      <div class="setting-item">
+        <div class="setting-info"><h4>Zaman</h4><p id="last-scrape-time">-</p></div>
+        <div class="setting-info"><h4>Durum</h4><p id="last-scrape-status">-</p></div>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h3>📋 Tarama Logları</h3>
+      <div class="log-list" id="logs-list"><p style="color:var(--text-muted); text-align:center; padding:20px;">Yükleniyor...</p></div>
+    </div>
+
+    <div class="settings-card">
+      <h3>ℹ️ Hakkında</h3>
+      <p style="color:var(--text-secondary); font-size:14px; line-height:1.7;">
+        AI Haber Takip, yapay zeka, vibe coding ve developer tools gelişmelerini tarayan PWA uygulamasıdır.
+        OpenRouter ve OpenCode Zen destekli LLM ile Türkçe çeviri, hafıza sistemi ve sesli sohbet özellikli.
+      </p>
+    </div>
+  </div>
+
+  <!-- Detay Modal -->
+  <div class="modal-overlay" id="detail-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <span style="font-weight:600; font-size:14px; color:var(--text-secondary);">Haber Detayı</span>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="card-btn tts-btn" id="modal-tts-btn" onclick="readAloudModal()" title="Sesli Oku">🔊</button>
+          <button class="modal-close" id="modal-close">✕</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <img class="modal-thumbnail" id="modal-thumbnail" src="" alt="" style="display:none;">
+        <h2 id="modal-title"></h2>
+        <div class="modal-meta">
+          <span class="meta-item"><span class="card-category" id="modal-category"></span></span>
+          <span class="meta-item" id="modal-type"></span>
+          <span class="meta-item">📰 <span id="modal-source"></span></span>
+          <span class="meta-item">🕐 <span id="modal-date"></span></span>
+        </div>
+        <div class="summary-text" id="modal-summary"></div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <a class="btn-source" id="modal-source-link" href="#" target="_blank" rel="noopener">🔗 Kaynağa Git</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer Sticky Navbar -->
+  <nav class="bottom-nav">
+    <div class="nav-items">
+      <button class="nav-item active" data-page="home"><span class="nav-icon">🏠</span><span class="nav-label">Ana Sayfa</span></button>
+      <button class="nav-item" data-page="chat"><span class="nav-icon">💬</span><span class="nav-label">Sohbet</span></button>
+      <button class="nav-item" data-page="featured"><span class="nav-icon">⭐</span><span class="nav-label">Öne Çıkanlar</span></button>
+      <button class="nav-item" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-label">Ayarlar</span></button>
+    </div>
+  </nav>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
