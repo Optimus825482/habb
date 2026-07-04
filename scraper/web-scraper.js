@@ -59,7 +59,9 @@ async function fetchRssFeed(source) {
         category: source.category,
         content_type: 'web',
         thumbnail,
-        published_at: item.pubDate || item.isoDate || new Date().toISOString()
+        published_at: item.pubDate || item.isoDate || new Date().toISOString(),
+        video_links: null,
+        video_id: null
       });
     }
   } catch (err) {

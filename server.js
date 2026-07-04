@@ -139,14 +139,32 @@ app.post('/api/llm/models', async (req, res) => {
       // Geçici key ile model listesi çek
       const models = await (async () => {
         const fetch = (await import('node-fetch')).default;
-        const p = PROVIDERS[provider];
-        const modelsUrl = provider === 'opencode' ? 'https://opencode.ai/zen/v1/models' : 'https://openrouter.ai/api/v1/models';
+        const modelsUrls = {
+          opencode: 'https://opencode.ai/zen/v1/models',
+          kilogateway: 'https://api.kilo.ai/api/gateway/models',
+          openrouter: 'https://openrouter.ai/api/v1/models'
+        };
+        const modelsUrl = modelsUrls[provider] || modelsUrls.openrouter;
         const res = await fetch(modelsUrl, { headers: { 'Authorization': `Bearer ${api_key}` } });
         if (!res.ok) throw new Error(`API hatası: ${res.status}`);
         const data = await res.json();
         const models = data.data || data.models || [];
         if (provider === 'opencode') {
           return models.map(m => ({ id: m.id, name: m.name || m.id, description: m.description || '', contextLength: m.context_length || 4096, free: m.id.toLowerCase().includes('free') || m.pricing?.prompt === '0' }));
+        }
+        if (provider === 'kilogateway') {
+          const isFreeModel = (m) => {
+            if (m.isFree === true) return true;
+            const p = m.pricing || {};
+            const prompt = parseFloat(p.prompt ?? '1');
+            const completion = parseFloat(p.completion ?? '1');
+            return prompt === 0 && completion === 0;
+          };
+          let freeModels = models.filter(isFreeModel).map(m => ({ id: m.id, name: m.name || m.id, description: `${m.description || ''} | ${m.context_length || m.top_provider?.context_length || ''} ctx`, contextLength: m.context_length || m.top_provider?.context_length || 4096, free: true }));
+          if (freeModels.length === 0) {
+            freeModels = models.map(m => ({ id: m.id, name: m.name || m.id, description: `${m.description || ''} | ${m.context_length || m.top_provider?.context_length || ''} ctx`, contextLength: m.context_length || m.top_provider?.context_length || 4096, free: false }));
+          }
+          return freeModels;
         }
         return models.filter(m => parseFloat(m.pricing?.prompt || '1') === 0).map(m => ({ id: m.id, name: m.name, description: m.description?.substring(0, 100) || '', contextLength: m.context_length, free: true }));
       })();

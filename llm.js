@@ -90,18 +90,35 @@ export async function fetchModels(providerName) {
     }
 
     if (providerName === 'kilogateway') {
-      // KiloGateway - ücretsiz modelleri filtrele (input/output fiyatı "0" olanlar)
-      return models.filter(m => {
-        const inputPrice = parseFloat(m.pricing?.input_token || '1');
-        const outputPrice = parseFloat(m.pricing?.output_token || '1');
-        return inputPrice === 0 && outputPrice === 0;
-      }).map(m => ({
+      // KiloGateway - isFree field'ı var, pricing.prompt/completion string olarak geliyor
+      const isFreeModel = (m) => {
+        if (m.isFree === true) return true;
+        const p = m.pricing || {};
+        const prompt = parseFloat(p.prompt ?? '1');
+        const completion = parseFloat(p.completion ?? '1');
+        return prompt === 0 && completion === 0;
+      };
+
+      let freeModels = models.filter(isFreeModel).map(m => ({
         id: m.id,
-        name: m.id,
-        description: `${m.provider || ''} | ${m.context_window ? m.context_window + ' ctx' : ''}`,
-        contextLength: m.context_window || 4096,
+        name: m.name || m.id,
+        description: `${m.description || ''} | ${m.context_length || m.top_provider?.context_length || ''} ctx`,
+        contextLength: m.context_length || m.top_provider?.context_length || 4096,
         free: true
       }));
+
+      // Ücretsiz model bulunamazsa tüm modelleri döndür
+      if (freeModels.length === 0) {
+        freeModels = models.map(m => ({
+          id: m.id,
+          name: m.name || m.id,
+          description: `${m.description || ''} | ${m.context_length || m.top_provider?.context_length || ''} ctx`,
+          contextLength: m.context_length || m.top_provider?.context_length || 4096,
+          free: false
+        }));
+      }
+
+      return freeModels;
     }
 
     // OpenRouter - ücretsiz modelleri filtrele
