@@ -376,6 +376,7 @@ async function loadSettings() {
     if (s.llm_api_key) document.getElementById('or-key-status').innerHTML = `✅ Kayıtlı: ${s.llm_api_key_masked || '***'}`;
     if (s.opencode_api_key) document.getElementById('oc-key-status').innerHTML = `✅ Kayıtlı: ${s.opencode_api_key_masked || '***'}`;
     if (s.kilogateway_api_key) document.getElementById('kg-key-status').innerHTML = `✅ Kayıtlı: ${s.kilogateway_api_key_masked || '***'}`;
+    if (s.exa_api_key) document.getElementById('exa-key-status').innerHTML = `✅ Kayıtlı: ${s.exa_api_key_masked || '***'} · Web arama aktif`;
 
     // Model
     if (s.llm_model || s.opencode_model || s.kilogateway_model) {
@@ -492,6 +493,25 @@ async function saveUserName() {
   document.getElementById('app-title').textContent = `${name} - AI Haber`;
   document.getElementById('chat-greeting').textContent = `Merhaba ${name}!`;
   showToast(`${name} olarak kaydedildi`);
+}
+
+async function saveExaKey() {
+  const key = document.getElementById('exa-key-input').value.trim();
+  if (!key) return showToast('API Key boş olamaz');
+  // Önce doğrula
+  try {
+    const res = await fetch(`${API}/api/exa/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ api_key: key })
+    });
+    const json = await res.json();
+    if (!json.valid) return showToast('Geçersiz Exa API Key: ' + (json.error || ''));
+  } catch (e) {}
+  await saveSetting('exa_api_key', key);
+  document.getElementById('exa-key-input').value = '';
+  document.getElementById('exa-key-status').innerHTML = '✅ Kaydedildi · Web arama aktif';
+  showToast('Exa API Key kaydedildi — Web arama aktif!');
 }
 
 async function saveVoiceSetting(voice) {

@@ -147,13 +147,14 @@ export async function translateAndSummarize(article, apiKey, modelId, providerNa
   const provider = PROVIDERS[providerName] || getActiveProvider();
 
   const prompt = `Sen profesyonel bir Türkçe haber editörüsün. Aşağıdaki haberi Türkçe'ye çevir VE kısa bir özet çıkar.
+SADECE Türkçe yanıt ver. Başka dil kullanma.
 
 BAŞLIK: ${article.title}
 ÖZET: ${article.summary || 'Özet mevcut değil'}
 KAYNAK: ${article.source_name || 'Bilinmeyen'}
 KATEGORİ: ${article.category}
 
-Lütfen şu formatta yanıt ver:
+Lütfen şu formatta yanıt ver (SADECE Türkçe):
 BAŞLIK: <Türkçe başlık>
 ÖZET: <Türkçe özet (2-3 cümle)>
 ANAHTAR KELİMELER: <haberin ana konusu, 3-5 kelime>`;
@@ -169,7 +170,7 @@ ANAHTAR KELİMELER: <haberin ana konusu, 3-5 kelime>`;
       body: JSON.stringify({
         model: modelId,
         messages: [
-          { role: 'system', content: 'Sen profesyonel bir Türkçe haber editörüsün. Haberleri doğal ve akıcı Türkçe ile çevirirsin.' },
+          { role: 'system', content: 'Sen profesyonel bir Türkçe haber editörüsün. Haberleri doğal ve akıcı Türkçe ile çevirirsin. SADECE Türkçe yanıt ver, asla başka dil kullanma.' },
           { role: 'user', content: prompt }
         ],
         max_tokens: 600,
@@ -236,76 +237,6 @@ export async function translateAllUntranslated(apiKey, modelId, providerName, ba
   return { translated, errors, total: untranslated.length };
 }
 
-// ===== SOHBET (Hafıza Destekli) =====
-
-export async function chat(userMessage, apiKey, modelId, providerName) {
-  if (!apiKey || !modelId) throw new Error('API Key ve model seçilmedi');
-
-  const provider = PROVIDERS[providerName] || getActiveProvider();
-  const userName = dbFunctions.getSetting('user_name') || 'Kullanıcı';
-
-  // Hafızadan ilgili bilgileri çek
-  const knowledgeContext = dbFunctions.searchKnowledge(userMessage, 10);
-  const todayNews = dbFunctions.getTodayKnowledge(10);
-
-  let contextBlock = '';
-  if (knowledgeContext.length > 0) {
-    contextBlock += '\n\n## İLGİLİ HAFIZA BİLGİLERİ:\n';
-    knowledgeContext.forEach((k, i) => {
-      contextBlock += `${i + 1}. [${k.category}] ${k.title}\n   ${k.content}\n   Kaynak: ${k.source_name}\n\n`;
-    });
-  }
-  if (todayNews.length > 0) {
-    contextBlock += '\n\n## BUGÜNÜN HABERLERİ:\n';
-    todayNews.forEach((k, i) => {
-      contextBlock += `${i + 1}. ${k.title} - ${k.content.substring(0, 150)}\n`;
-    });
-  }
-
-  const systemPrompt = `Sen "${userName}" adlı kullanıcının kişisel yapay zeka asistanısın.
-Senin adın "AI Asistan". Kullanıcının haber takip uygulamasındaki bilgilere erişimin var.
-Hafızandaki bilgileri kullanarak kullanıcıya yardımcı ol.
-Türkçe yanıt ver, doğal ve samimi ol. Kısa ve öz yanıt ver.
-
-HAFIZA BİLGİLERİ:${contextBlock}`;
-
-  try {
-    const res = await fetch(provider.chatUrl, {
-      method: 'POST',
-      headers: {
-        [provider.headerKey]: `${provider.headerPrefix}${apiKey}`,
-        'Content-Type': 'application/json',
-        ...provider.extraHeaders
-      },
-      body: JSON.stringify({
-        model: modelId,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage }
-        ],
-        max_tokens: 800,
-        temperature: 0.7
-      })
-    });
-
-    if (!res.ok) {
-      const errorBody = await res.text();
-      throw new Error(`API hatası ${res.status}: ${errorBody}`);
-    }
-
-    const data = await res.json();
-    const reply = data.choices?.[0]?.message?.content || 'Yanıt alınamadı.';
-
-    dbFunctions.addChatMessage('user', userMessage);
-    dbFunctions.addChatMessage('assistant', reply);
-
-    return reply;
-  } catch (err) {
-    console.error('[LLM] Sohbet hatası:', err.message);
-    throw err;
-  }
-}
-
 // ===== VIDEO TRANSKRİPT ÖZETLEME =====
 
 export async function summarizeVideoTranscript(transcriptText, title, apiKey, modelId, providerName) {
@@ -315,13 +246,14 @@ export async function summarizeVideoTranscript(transcriptText, title, apiKey, mo
   const provider = PROVIDERS[providerName] || getActiveProvider();
 
   const prompt = `Aşağıdaki YouTube video transcript'ini Türkçe'ye çevir ve özetle.
+SADECE Türkçe yanıt ver. Başka dil kullanma.
 
 Video Başlığı: ${title}
 
 TRANSCRIPT:
 ${transcriptText}
 
-Lütfen şu formatta yanıt ver:
+Lütfen şu formatta yanıt ver (SADECE Türkçe):
 
 ÖZET: <2-4 cümlelik Türkçe özet>
 
@@ -348,7 +280,7 @@ Eğer videoda bağlantı yoksa "VİDEODAKİ BAĞLANTILAR: Yok" yaz.`;
       body: JSON.stringify({
         model: modelId,
         messages: [
-          { role: 'system', content: 'Sen profesyonel bir Türkçe video içerik editörüsün. Videoları özetler, önemli noktaları çıkarır ve içerikteki bağlantıları listelersin.' },
+          { role: 'system', content: 'Sen profesyonel bir Türkçe video içerik editörüsün. Videoları özetler, önemli noktaları çıkarır ve içerikteki bağlantıları listelersin. SADECE Türkçe yanıt ver, asla başka dil kullanma.' },
           { role: 'user', content: prompt }
         ],
         max_tokens: 1000,
@@ -399,6 +331,155 @@ export async function validateApiKey(apiKey, providerName) {
     });
     return res.ok;
   } catch { return false; }
+}
+
+// ===== EXA WEB ARAMA =====
+
+export async function searchWeb(query, exaApiKey, numResults = 5) {
+  if (!exaApiKey) throw new Error('Exa API Key girilmedi');
+
+  const res = await fetch('https://api.exa.ai/search', {
+    method: 'POST',
+    headers: {
+      'x-api-key': exaApiKey,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      query,
+      numResults,
+      type: 'auto',
+      contents: { highlights: true }
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Exa API hatası ${res.status}: ${err}`);
+  }
+
+  const data = await res.json();
+  return (data.results || []).map(r => ({
+    title: r.title || '',
+    url: r.url || '',
+    text: (r.highlights || []).join(' ') || r.text || '',
+    score: r.score || 0
+  }));
+}
+
+// ===== SOHBET (Hafıza + Web Arama Destekli) =====
+
+export async function chat(userMessage, apiKey, modelId, providerName, exaApiKey = null) {
+  if (!apiKey || !modelId) throw new Error('API Key ve model seçilmedi');
+
+  const provider = PROVIDERS[providerName] || getActiveProvider();
+  const userName = dbFunctions.getSetting('user_name') || 'Kullanıcı';
+
+  // Hafızadan ilgili bilgileri çek
+  const knowledgeContext = dbFunctions.searchKnowledge(userMessage, 10);
+  const todayNews = dbFunctions.getTodayKnowledge(10);
+
+  let contextBlock = '';
+  if (knowledgeContext.length > 0) {
+    contextBlock += '\n\n## İLGİLİ HAFIZA BİLGİLERİ:\n';
+    knowledgeContext.forEach((k, i) => {
+      contextBlock += `${i + 1}. [${k.category}] ${k.title}\n   ${k.content}\n   Kaynak: ${k.source_name}\n\n`;
+    });
+  }
+  if (todayNews.length > 0) {
+    contextBlock += '\n\n## BUGÜNÜN HABERLERİ:\n';
+    todayNews.forEach((k, i) => {
+      contextBlock += `${i + 1}. ${k.title} - ${k.content.substring(0, 150)}\n`;
+    });
+  }
+
+  // Web arama yeteneği varsa system prompt'a ekle
+  let searchAbility = '';
+  if (exaApiKey) {
+    searchAbility = `
+\n\n## WEB ARAMA YETENEĞİ:
+Gerektiğinde internetten bilgi alabilirsin. Kullanıcı güncel bilgi, son gelişmeler veya hafızanda olmayan bir konu sorduğunda web araması yapmak istersen, yanıtının BAŞINA şunu yaz:
+[ARA: <arama sorgusu>]
+Örneğin: [ARA: yapay zeka son gelişmeler 2026]
+Sistem otomatik olarak arama yapıp sonuçları sana iletecek. Arama sonuçlarını kullanarak Türkçe ve kapsamlı yanıt ver.`;
+  }
+
+  const systemPrompt = `Sen "${userName}" adlı kullanıcının kişisel yapay zeka asistanısın.
+Senin adın "AI Asistan". Kullanıcının haber takip uygulamasındaki bilgilere erişimin var.
+Hafızandaki bilgileri kullanarak kullanıcıya yardımcı ol.
+SADECE Türkçe yanıt ver. Hiçbir zaman İngilizce veya başka dil kullanma. Doğal ve samimi ol. Kısa ve öz yanıt ver.
+${searchAbility}
+
+HAFIZA BİLGİLERİ:${contextBlock}`;
+
+  // İlk aşama: LLM'den yanıt al
+  let reply = await callLLM(provider, apiKey, modelId, systemPrompt, userMessage);
+
+  // Web arama gerekiyorsa
+  if (exaApiKey && reply.includes('[ARA:')) {
+    const searchMatch = reply.match(/\[ARA:\s*(.+?)\]/);
+    if (searchMatch) {
+      const searchQuery = searchMatch[1].trim();
+      try {
+        const searchResults = await searchWeb(searchQuery, exaApiKey);
+        if (searchResults.length > 0) {
+          const searchContext = searchResults.map((r, i) =>
+            `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.text.substring(0, 500)}`
+          ).join('\n\n');
+
+          const followUpPrompt = `Aşağıdaki web arama sonuçlarını kullanarak kullanıcıya kapsamlı bir yanıt ver.
+SADECE Türkçe yanıt ver.
+
+ARAMA SONUÇLARI (${searchQuery}):
+${searchContext}
+
+Kullanıcının sorusu: ${userMessage}
+
+Önceki yanıtın (arama yapılmamış hali): ${reply.replace(/\[ARA:\s*.+?\]/, '').trim()}
+
+Şimdi web sonuçlarını kullanarak güncel ve kapsamlı bir Türkçe yanıt ver:`;
+
+          reply = await callLLM(provider, apiKey, modelId, 'Sen profesyonel bir Türkçe araştırma asistanısın. Web sonuçlarını kullanarak güncel ve doğru bilgi ver. SADECE Türkçe yanıt ver.', followUpPrompt);
+        }
+      } catch (err) {
+        console.error('[LLM] Web arama hatası:', err.message);
+        reply = reply.replace(/\[ARA:\s*.+?\]/, '').trim() + '\n\n(⚠️ Web araması başarısız oldu)';
+      }
+    }
+  }
+
+  dbFunctions.addChatMessage('user', userMessage);
+  dbFunctions.addChatMessage('assistant', reply);
+
+  return reply;
+}
+
+// LLM çağrısı (tek seferlik)
+async function callLLM(provider, apiKey, modelId, systemPrompt, userMessage) {
+  const res = await fetch(provider.chatUrl, {
+    method: 'POST',
+    headers: {
+      [provider.headerKey]: `${provider.headerPrefix}${apiKey}`,
+      'Content-Type': 'application/json',
+      ...provider.extraHeaders
+    },
+    body: JSON.stringify({
+      model: modelId,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage }
+      ],
+      max_tokens: 1000,
+      temperature: 0.7
+    })
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.text();
+    throw new Error(`API hatası ${res.status}: ${errorBody}`);
+  }
+
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || 'Yanıt alınamadı.';
 }
 
 // Provider listesini döndür

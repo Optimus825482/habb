@@ -163,6 +163,19 @@
           <span id="translate-progress" style="font-size:12px; color:var(--text-muted);"></span>
         </div>
       </div>
+
+      <!-- Exa Web Arama -->
+      <div class="setting-item" style="flex-direction:column; align-items:stretch; gap:8px;">
+        <div class="setting-info">
+          <h4>🔍 Exa Web Arama</h4>
+          <p id="exa-key-status">Henüz girilmedi · <a href="https://dashboard.exa.ai" target="_blank" style="color:var(--accent-secondary);">Ücretsiz key al →</a></p>
+        </div>
+        <p style="font-size:12px; color:var(--text-muted); margin:0;">Sohbette web araması yapabilmesi için gerekli. Ayarlanırsa asistan internetten güncel bilgi çekebilir.</p>
+        <div style="display:flex; gap:8px;">
+          <input type="password" id="exa-key-input" placeholder="Exa API key..." class="setting-input" autocomplete="off">
+          <button class="btn-scan" onclick="saveExaKey()" style="font-size:12px; padding:8px 14px;">Kaydet</button>
+        </div>
+      </div>
     </div>
 
     <!-- Ses Ayarları -->

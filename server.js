@@ -5,13 +5,27 @@ import { fileURLToPath } from 'url';
 import { dbFunctions } from './db.js';
 import { scrapeAllWeb } from './scraper/web-scraper.js';
 import { scrapeAllYoutube } from './scraper/youtube-scraper.js';
-import { fetchModels, translateAllUntranslated, validateApiKey, chat, getProviders } from './llm.js';
+import { fetchModels, translateAllUntranslated, validateApiKey, chat, getProviders, searchWeb } from './llm.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3036;
+
+// Provider'a göre key/model setting adlarını döndür
+function getProviderCreds(provider) {
+  const map = {
+    openrouter: { key: 'llm_api_key', model: 'llm_model' },
+    opencode: { key: 'opencode_api_key', model: 'opencode_model' },
+    kilogateway: { key: 'kilogateway_api_key', model: 'kilogateway_model' }
+  };
+  const p = map[provider] || map.openrouter;
+  return {
+    apiKey: dbFunctions.getSetting(p.key),
+    modelId: dbFunctions.getSetting(p.model)
+  };
+}
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -108,6 +122,7 @@ app.get('/api/settings', (req, res) => {
     if (settings.llm_api_key) settings.llm_api_key_masked = settings.llm_api_key.substring(0, 4) + '****' + settings.llm_api_key.slice(-4);
     if (settings.opencode_api_key) settings.opencode_api_key_masked = settings.opencode_api_key.substring(0, 4) + '****' + settings.opencode_api_key.slice(-4);
     if (settings.kilogateway_api_key) settings.kilogateway_api_key_masked = settings.kilogateway_api_key.substring(0, 4) + '****' + settings.kilogateway_api_key.slice(-4);
+    if (settings.exa_api_key) settings.exa_api_key_masked = settings.exa_api_key.substring(0, 4) + '****' + settings.exa_api_key.slice(-4);
     res.json({ success: true, data: settings });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
@@ -183,15 +198,24 @@ app.post('/api/llm/validate', async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
+// Exa API Key doğrulama
+app.post('/api/exa/validate', async (req, res) => {
+  try {
+    const { api_key } = req.body;
+    if (!api_key) return res.status(400).json({ success: false, error: 'API Key gerekli' });
+    const results = await searchWeb('test', api_key, 1);
+    res.json({ success: true, valid: true, resultCount: results.length });
+  } catch (err) { res.json({ success: true, valid: false, error: err.message }); }
+});
+
 app.post('/api/llm/translate', async (req, res) => {
   try {
     const provider = dbFunctions.getSetting('active_provider') || 'openrouter';
-    const apiKey = dbFunctions.getSetting(provider === 'opencode' ? 'opencode_api_key' : 'llm_api_key');
-    const modelId = dbFunctions.getSetting(provider === 'opencode' ? 'opencode_model' : 'llm_model');
-    if (!apiKey) return res.status(400).json({ success: false, error: 'API Key girilmedi' });
-    if (!modelId) return res.status(400).json({ success: false, error: 'Model seçilmedi' });
+    const creds = getProviderCreds(provider);
+    if (!creds.apiKey) return res.status(400).json({ success: false, error: 'API Key girilmedi' });
+    if (!creds.modelId) return res.status(400).json({ success: false, error: 'Model seçilmedi' });
     const { batch_size = 5 } = req.body || {};
-    const result = await translateAllUntranslated(apiKey, modelId, provider, batch_size);
+    const result = await translateAllUntranslated(creds.apiKey, creds.modelId, provider, batch_size);
     res.json({ success: true, message: `${result.translated} haber çevirildi.`, data: result });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
@@ -203,10 +227,10 @@ app.post('/api/chat', async (req, res) => {
     const { message } = req.body;
     if (!message) return res.status(400).json({ success: false, error: 'Mesaj gerekli' });
     const provider = dbFunctions.getSetting('active_provider') || 'openrouter';
-    const apiKey = dbFunctions.getSetting(provider === 'opencode' ? 'opencode_api_key' : 'llm_api_key');
-    const modelId = dbFunctions.getSetting(provider === 'opencode' ? 'opencode_model' : 'llm_model');
-    if (!apiKey || !modelId) return res.status(400).json({ success: false, error: 'API Key ve model seçilmeli' });
-    const reply = await chat(message, apiKey, modelId, provider);
+    const creds = getProviderCreds(provider);
+    if (!creds.apiKey || !creds.modelId) return res.status(400).json({ success: false, error: 'API Key ve model seçilmeli' });
+    const exaApiKey = dbFunctions.getSetting('exa_api_key');
+    const reply = await chat(message, creds.apiKey, creds.modelId, provider, exaApiKey);
     res.json({ success: true, reply });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
@@ -241,7 +265,10 @@ app.post('/api/tts', async (req, res) => {
     const scriptFile = `tts_${Date.now()}.py`;
     fs.writeFileSync(scriptFile, script);
     try {
-      execSync(`python "${scriptFile}"`, { timeout: 30000, stdio: 'pipe' });
+      // python3 veya python dene
+      let pythonCmd = 'python3';
+      try { execSync('python3 --version', { stdio: 'pipe' }); } catch { pythonCmd = 'python'; }
+      execSync(`${pythonCmd} "${scriptFile}"`, { timeout: 30000, stdio: 'pipe' });
       const audio = fs.readFileSync(tmpFile);
       res.set({ 'Content-Type': 'audio/mpeg', 'Access-Control-Allow-Origin': '*' });
       res.send(audio);
@@ -270,9 +297,8 @@ cron.schedule('0 9,13,17,21 * * *', async () => {
   try {
     const result = await runScrape();
     const provider = dbFunctions.getSetting('active_provider') || 'openrouter';
-    const apiKey = dbFunctions.getSetting(provider === 'opencode' ? 'opencode_api_key' : 'llm_api_key');
-    const modelId = dbFunctions.getSetting(provider === 'opencode' ? 'opencode_model' : 'llm_model');
-    if (apiKey && modelId) await translateAllUntranslated(apiKey, modelId, provider, 10);
+    const creds = getProviderCreds(provider);
+    if (creds.apiKey && creds.modelId) await translateAllUntranslated(creds.apiKey, creds.modelId, provider, 10);
     console.log(`[CRON] Tamamlandı. ${result.newItems} yeni.`);
   } catch (err) { console.error('[CRON] Hata:', err.message); }
 });
