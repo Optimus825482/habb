@@ -131,10 +131,14 @@ app.post('/api/scrape', async (req, res) => {
 app.get('/api/settings', (req, res) => {
   try {
     const settings = dbFunctions.getAllSettings();
-    if (settings.llm_api_key) settings.llm_api_key_masked = settings.llm_api_key.substring(0, 4) + '****' + settings.llm_api_key.slice(-4);
-    if (settings.opencode_api_key) settings.opencode_api_key_masked = settings.opencode_api_key.substring(0, 4) + '****' + settings.opencode_api_key.slice(-4);
-    if (settings.kilogateway_api_key) settings.kilogateway_api_key_masked = settings.kilogateway_api_key.substring(0, 4) + '****' + settings.kilogateway_api_key.slice(-4);
-    if (settings.exa_api_key) settings.exa_api_key_masked = settings.exa_api_key.substring(0, 4) + '****' + settings.exa_api_key.slice(-4);
+    // API key'leri masked versiyonla değiştir, ham key'leri gösterme
+    const safeKeys = ['llm_api_key', 'opencode_api_key', 'kilogateway_api_key', 'exa_api_key'];
+    for (const key of safeKeys) {
+      if (settings[key]) {
+        settings[key + '_masked'] = settings[key].substring(0, 4) + '****' + settings[key].slice(-4);
+        settings[key] = '***'; // Ham key'i sil
+      }
+    }
     res.json({ success: true, data: settings });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
@@ -270,32 +274,33 @@ app.post('/api/tts', async (req, res) => {
   try {
     const { text, voice = 'tr-TR-EmelNeural' } = req.body;
     if (!text) return res.status(400).json({ success: false, error: 'Metin gerekli' });
+
+    // Voice parametresini doğrula — sadece izin verilen sesler
+    const allowedVoices = ['tr-TR-EmelNeural', 'tr-TR-AhmetNeural'];
+    const safeVoice = allowedVoices.includes(voice) ? voice : 'tr-TR-EmelNeural';
+
     const { execSync } = await import('child_process');
     const fs = await import('fs');
+    const os = await import('os');
+    const tmpDir = os.tmpdir();
 
-    // Metni temizle: noktalama işaretlerinden önceki gereksiz boşlukları sil
+    // Metni temizle
     let cleanText = text
       .replace(/\s+/g, ' ')
       .replace(/\.\s*\.\s*/g, '. ')
       .replace(/,\s*,/g, ',')
-      .trim();
+      .trim()
+      .substring(0, 2000); // Maksimum 2000 karakter
 
-    // SSML ile hız ve pitch ayarı: %25 hızlı, +10Hz pitch (hafif robotik)
-    const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="tr-TR">
-      <voice name="${voice}">
-        <prosody rate="+25%" pitch="+10Hz">
-          ${cleanText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
-        </prosody>
-      </voice>
-    </speak>`;
+    // SSML ile hız ve pitch ayarı
+    const escapedText = cleanText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="tr-TR"><voice name="${safeVoice}"><prosody rate="+25%" pitch="+10Hz">${escapedText}</prosody></voice></speak>`;
 
-    const tmpFile = `tts_${Date.now()}.mp3`;
-    const script = `import asyncio, edge_tts
-async def main():
-    c = edge_tts.Communicate('''${ssml.replace(/'/g, "\\'")}''', "${voice}")
-    await c.save("${tmpFile}")
-asyncio.run(main())`;
-    const scriptFile = `tts_${Date.now()}.py`;
+    const tmpFile = `${tmpDir}/tts_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`;
+    const scriptFile = `${tmpDir}/tts_${Date.now()}_${Math.random().toString(36).slice(2)}.py`;
+    // Base64 encode ile injection engeli
+    const b64 = Buffer.from(ssml, 'utf-8').toString('base64');
+    const script = `import asyncio, edge_tts, base64\nasync def main():\n    ssml = base64.b64decode("${b64}").decode("utf-8")\n    c = edge_tts.Communicate(ssml, "${safeVoice}")\n    await c.save("${tmpFile.replace(/\\/g, '\\\\')}")\nasyncio.run(main())`;
     fs.writeFileSync(scriptFile, script);
     try {
       let pythonCmd = 'python3';
@@ -327,10 +332,7 @@ app.get('/api/scrape-logs', (req, res) => {
 cron.schedule('0 9,13,17,21 * * *', async () => {
   console.log('[CRON] Otomatik tarama...');
   try {
-    const result = await runScrape();
-    const provider = dbFunctions.getSetting('active_provider') || 'openrouter';
-    const creds = getProviderCreds(provider);
-    if (creds.apiKey && creds.modelId) await translateAllUntranslated(creds.apiKey, creds.modelId, provider, 10);
+    const result = await runScrape(); // runScrape içinde zaten çeviri var
     console.log(`[CRON] Tamamlandı. ${result.newItems} yeni.`);
   } catch (err) { console.error('[CRON] Hata:', err.message); }
 });

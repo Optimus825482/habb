@@ -4,15 +4,19 @@
 import asyncio
 import json
 import sys
+import os
 import edge_tts
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 # Türkçe sesler
 TURKISH_VOICES = [
-    "tr-TR-AhmetNeural",
-    "tr-TR-EmelNeural"
+    "tr-TR-EmelNeural",
+    "tr-TR-AhmetNeural"
 ]
+
+# Ortak event loop
+_loop = asyncio.new_event_loop()
 
 async def text_to_speech(text, voice="tr-TR-EmelNeural", output_file="output.mp3"):
     """Metni sese çevir - SSML ile hız ve pitch ayarı"""
@@ -97,10 +101,26 @@ class TTSHandler(BaseHTTPRequestHandler):
         else:
             self.send_error(404)
 
+    def do_OPTIONS(self):
+        """CORS preflight"""
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
     def handle_tts(self):
         """Tek seferde metni sese çevir"""
-        content_length = int(self.headers.get('Content-Length', 0))
-        body = json.loads(self.rfile.read(content_length))
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length == 0:
+                self.send_json(400, {"error": "body gerekli"})
+                return
+            raw = self.rfile.read(content_length)
+            body = json.loads(raw)
+        except (json.JSONDecodeError, ValueError) as e:
+            self.send_json(400, {"error": f"Geçersiz JSON: {e}"})
+            return
 
         text = body.get('text', '')
         voice = body.get('voice', 'tr-TR-EmelNeural')
@@ -109,15 +129,23 @@ class TTSHandler(BaseHTTPRequestHandler):
             self.send_json(400, {"error": "text gerekli"})
             return
 
-        try:
-            loop = asyncio.new_event_loop()
-            output_file = loop.run_until_complete(
-                text_to_speech(text, voice, "tts_output.mp3")
-            )
-            loop.close()
+        # Voice doğrulama
+        if voice not in TURKISH_VOICES:
+            voice = 'tr-TR-EmelNeural'
 
-            with open(output_file, 'rb') as f:
+        try:
+            tmp_file = f"tts_output_{os.getpid()}.mp3"
+            _loop.run_until_complete(
+                text_to_speech(text, voice, tmp_file)
+            )
+
+            with open(tmp_file, 'rb') as f:
                 audio_data = f.read()
+
+            try:
+                os.unlink(tmp_file)
+            except OSError:
+                pass
 
             self.send_response(200)
             self.send_header('Content-Type', 'audio/mpeg')
@@ -131,8 +159,16 @@ class TTSHandler(BaseHTTPRequestHandler):
 
     def handle_tts_chunks(self):
         """Metni chunk'lara bölerek çevir"""
-        content_length = int(self.headers.get('Content-Length', 0))
-        body = json.loads(self.rfile.read(content_length))
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length == 0:
+                self.send_json(400, {"error": "body gerekli"})
+                return
+            raw = self.rfile.read(content_length)
+            body = json.loads(raw)
+        except (json.JSONDecodeError, ValueError) as e:
+            self.send_json(400, {"error": f"Geçersiz JSON: {e}"})
+            return
 
         text = body.get('text', '')
         voice = body.get('voice', 'tr-TR-EmelNeural')
@@ -141,12 +177,13 @@ class TTSHandler(BaseHTTPRequestHandler):
             self.send_json(400, {"error": "text gerekli"})
             return
 
+        if voice not in TURKISH_VOICES:
+            voice = 'tr-TR-EmelNeural'
+
         try:
-            loop = asyncio.new_event_loop()
-            chunk_files = loop.run_until_complete(
+            chunk_files = _loop.run_until_complete(
                 text_to_speech_chunks(text, voice)
             )
-            loop.close()
 
             self.send_json(200, {
                 "chunks": [f"/tts/audio/{f}" for f in chunk_files],
@@ -162,8 +199,12 @@ class TTSHandler(BaseHTTPRequestHandler):
         self.send_json(200, {"voices": voices})
 
     def serve_audio(self, filename):
-        """MP3 dosyasını sun"""
+        """MP3 dosyasını sun ve temizle"""
         try:
+            # Sadece tts_chunk_ dosyalarını sun (path traversal engeli)
+            if not filename.startswith('tts_chunk_') and not filename.startswith('tts_output_'):
+                self.send_error(403)
+                return
             with open(filename, 'rb') as f:
                 audio_data = f.read()
             self.send_response(200)
@@ -172,6 +213,11 @@ class TTSHandler(BaseHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(audio_data)
+            # Chunk dosyasını temizle
+            try:
+                os.unlink(filename)
+            except OSError:
+                pass
         except FileNotFoundError:
             self.send_error(404)
 

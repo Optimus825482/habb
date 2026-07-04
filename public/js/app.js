@@ -61,8 +61,13 @@ async function loadMoreNews() {
     else if (currentCategory !== 'all') params.set('category', currentCategory);
     const res = await fetch(`${API}/api/news?${params}`);
     const json = await res.json();
-    if (json.success && json.data.length > 0) { allNews = [...allNews, ...json.data]; appendNews(json.data); }
-  } catch (err) {}
+    if (json.success && json.data.length > 0) {
+      allNews = [...allNews, ...json.data];
+      appendNews(json.data);
+    } else {
+      currentPage--; // Boş yanıt sayfa indisini geri al
+    }
+  } catch (err) { currentPage--; }
 }
 
 async function loadStats() {
@@ -323,7 +328,17 @@ function addChatMsg(role, text) {
   if (welcome) welcome.remove();
   const div = document.createElement('div');
   div.className = `chat-msg ${role}`;
-  div.innerHTML = `${esc(text)}`;
+  // Asistan mesajlarında basit markdown: bold, listeler, satır başları
+  if (role === 'assistant') {
+    let html = esc(text)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n- /g, '\n<li>')
+      .replace(/\n(\d+)\. /g, '\n<li>')
+      .replace(/\n/g, '<br>');
+    div.innerHTML = html;
+  } else {
+    div.innerHTML = `${esc(text)}`;
+  }
   if (role === 'assistant') {
     const ttsBtn = document.createElement('button');
     ttsBtn.className = 'msg-tts';
@@ -374,11 +389,11 @@ async function loadSettings() {
     document.querySelectorAll('.provider-section').forEach(el => el.style.display = 'none');
     document.getElementById(`section-${activeProvider}`).style.display = '';
 
-    // API Key'ler
-    if (s.llm_api_key) document.getElementById('or-key-status').innerHTML = `✅ Kayıtlı: ${s.llm_api_key_masked || '***'}`;
-    if (s.opencode_api_key) document.getElementById('oc-key-status').innerHTML = `✅ Kayıtlı: ${s.opencode_api_key_masked || '***'}`;
-    if (s.kilogateway_api_key) document.getElementById('kg-key-status').innerHTML = `✅ Kayıtlı: ${s.kilogateway_api_key_masked || '***'}`;
-    if (s.exa_api_key) document.getElementById('exa-key-status').innerHTML = `✅ Kayıtlı: ${s.exa_api_key_masked || '***'} · Web arama aktif`;
+    // API Key'ler (masked versiyonları göster)
+    if (s.llm_api_key_masked || s.llm_api_key === '***') document.getElementById('or-key-status').innerHTML = `✅ Kayıtlı: ${s.llm_api_key_masked || '***'}`;
+    if (s.opencode_api_key_masked || s.opencode_api_key === '***') document.getElementById('oc-key-status').innerHTML = `✅ Kayıtlı: ${s.opencode_api_key_masked || '***'}`;
+    if (s.kilogateway_api_key_masked || s.kilogateway_api_key === '***') document.getElementById('kg-key-status').innerHTML = `✅ Kayıtlı: ${s.kilogateway_api_key_masked || '***'}`;
+    if (s.exa_api_key_masked || s.exa_api_key === '***') document.getElementById('exa-key-status').innerHTML = `✅ Kayıtlı: ${s.exa_api_key_masked || '***'} · Web arama aktif`;
 
     // Model
     if (s.llm_model || s.opencode_model || s.kilogateway_model) {

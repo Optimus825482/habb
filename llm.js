@@ -296,9 +296,10 @@ Eğer videoda bağlantı yoksa "VİDEODAKİ BAĞLANTILAR: Yok" yaz.`;
     const data = await res.json();
     const content = data.choices?.[0]?.message?.content || '';
 
-    const summaryMatch = content.match(/ÖZET:\s*([\s\S]+?)(?=\n\n|ÖNEMLİ|Anah tar|$)/i);
+    const summaryMatch = content.match(/ÖZET:\s*([\s\S]+?)(?=\n\n|ÖNEMLİ|ANAHTAR|$)/i);
     const pointsMatch = content.match(/ÖNEMLİ NOKTALAR?:?\s*([\s\S]+?)(?=\n\n|VİDEODAKİ|BAĞLANTILAR|$)/i);
     const linksMatch = content.match(/(?:VİDEODAKİ BAĞLANTILAR|BAĞLANTILAR):?\s*([\s\S]+?)$/i);
+    const keywordsMatch = content.match(/ANAHTAR KELİMELER?:?\s*(.+)/i);
 
     const summary = summaryMatch ? summaryMatch[1].trim() : content.substring(0, 300);
     let links = [];
@@ -313,6 +314,7 @@ Eğer videoda bağlantı yoksa "VİDEODAKİ BAĞLANTILAR: Yok" yaz.`;
     return {
       summary: summary.substring(0, 1000),
       importantPoints: pointsMatch ? pointsMatch[1].trim() : '',
+      keywords: keywordsMatch ? keywordsMatch[1].trim() : '',
       links: [...new Set(links)]
     };
   } catch (err) {
